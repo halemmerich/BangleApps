@@ -62,6 +62,7 @@ function onAccel(acc){
 }
 
 function startDetection(options){
+  if (startAveraging) throw "Already running, mutliple instances not implemented";
   if (options){
     if (options.averagingInterval) averagingInterval = options.averagingInterval;
     if (options.maxDiffAngle) maxDiffAngle = options.maxDiffAngle;
@@ -75,6 +76,10 @@ function startDetection(options){
 
 function stopDetection(){
   Bangle.removeListener("accel", onAccel);
+}
+
+function isRunning(){
+  return startAveraging;
 }
 
 function isInactive(){
@@ -121,6 +126,14 @@ exports.stop = stopDetection;
 
 /*
  * Get current inactivity state.
- * return undefined if not yet known, true for inactive and false for active
+ * returns:
+ *  undefined - if not yet known
+ *  true     - inactive
+ *  false    - active
  */
 exports.isInactive = isInactive;
+
+/*
+ * Get current detection state.
+ */
+exports.isRunning = isRunning;
