@@ -1,0 +1,15 @@
+{
+  "id": "libvanhees",
+  "name": "Van Hees inactivity detection library",
+  "shortName":"Van Hees inactivity detection",
+  "version":"0.01",
+  "description": "Library to detect inactivity using https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0142533",
+  "icon": "app.png",
+  "type": "module",
+  "provides_modules" : ["inactivity_detect"],
+  "tags": "",
+  "supports" : ["BANGLEJS2", "BANGLEJS"],
+  "storage": [
+    {"name":"inactivity_detect","url":"lib.js"}
+  ]
+}
