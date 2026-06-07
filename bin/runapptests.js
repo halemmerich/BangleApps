@@ -465,7 +465,7 @@ function runTest(test, testState) {
       emu.stopIdle();
     });
     return p;
-  });
+  }).catch(err => console.log("Error during getAppFilesString:" + err));
 }
 
 
@@ -537,6 +537,17 @@ emu.init({
       test = JSON.parse(require("fs").readFileSync(testFile).toString());
       test.app = app.id;
     }
+
+    if (process.argv.includes("--testindex")) {
+      let f = process.argv[process.argv.indexOf("--testindex") + 1];
+      if (test.tests.length - 1 < f){
+        console.log("No test with index " + f);
+        test.tests = [];
+      } else {
+        test.tests = [ test.tests[f] ];
+      }
+    }
+    if (test.tests.length > 0) {
     p = p.then(()=>{
       const testName = test.app + (test.description ? ` - ${test.description}` : '');
       return withTimeout(runTest(test, testState), TEST_TIMEOUT_MS, testName)
@@ -560,7 +571,8 @@ emu.init({
             throw err;
           }
         });
-    });
+      });
+    }
   });
   p.finally(()=>{
     console.log("\n\n");
