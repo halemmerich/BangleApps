@@ -423,13 +423,17 @@ function runTest(test, testState) {
         if (test.description)
           console.log(`"${test.description}`);
         console.log(`==============================`);
-        emu.factoryReset();
-        console.log("> SENDING APP "+test.app);
-        emu.tx(command);
-        if (verbose)
-          console.log("> SENT APP");
-        emu.tx("reset()\n");
-        console.log("> RESET");
+
+        emu.stopIdle();
+        return emu.init(EMU_OPTIONS).then(() => {
+          console.log("> SENDING APP " + test.app);
+          emu.tx(command);
+          if (verbose)
+            console.log("> SENT APP");
+          emu.tx("reset()\n");
+          console.log("> RESET");
+        });
+
 
       });
 
@@ -504,7 +508,7 @@ let handleConsoleOutput = (d) => {
 
 let testState = [];
 
-emu.init({
+const EMU_OPTIONS = {
   EMULATOR : EMULATOR,
   DEVICEID : DEVICEID,
   rxCallback : (ch)=>{
@@ -513,7 +517,9 @@ emu.init({
   consoleOutputCallback: (d)=>{
     handleConsoleOutput(d);
   }
-}).then(function() {
+};
+
+emu.init(EMU_OPTIONS).then(function() {
   // Emulator is now loaded
   console.log("Loading tests");
   let p = Promise.resolve();
