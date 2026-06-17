@@ -519,81 +519,77 @@ const EMU_OPTIONS = {
   }
 };
 
-emu.init(EMU_OPTIONS).then(function() {
-  // Emulator is now loaded
-  console.log("Loading tests");
-  let p = Promise.resolve();
-  let apps = apploader.apps;
+console.log("Loading tests");
+let p = Promise.resolve();
+let apps = apploader.apps;
 
-  apps.push(DEMOAPP);
+apps.push(DEMOAPP);
 
-  if (process.argv.includes("--id")) {
-    let f = process.argv[process.argv.indexOf("--id") + 1];
-    apps = apps.filter(e=>e.id==f);
-    if (apps.length == 0){
-      console.log("No apps left after filtering for " + f);
-      process.exit(255);
-    }
+if (process.argv.includes("--id")) {
+  let f = process.argv[process.argv.indexOf("--id") + 1];
+  apps = apps.filter(e=>e.id==f);
+  if (apps.length == 0){
+    console.log("No apps left after filtering for " + f);
+    process.exit(255);
+  }
+}
+
+apps.forEach(app => {
+  let test = DEMOTEST;
+  if (app.id != DEMOAPP.id){
+    let testFile = APP_DIR+"/"+app.id+"/test.json";
+    if (!require("fs").existsSync(testFile)) return;
+    test = JSON.parse(require("fs").readFileSync(testFile).toString());
+    test.app = app.id;
   }
 
-  apps.forEach(app => {
-    let test = DEMOTEST;
-    if (app.id != DEMOAPP.id){
-      let testFile = APP_DIR+"/"+app.id+"/test.json";
-      if (!require("fs").existsSync(testFile)) return;
-      test = JSON.parse(require("fs").readFileSync(testFile).toString());
-      test.app = app.id;
+  if (process.argv.includes("--testindex")) {
+    let f = process.argv[process.argv.indexOf("--testindex") + 1];
+    if (test.tests.length - 1 < f){
+      console.log("No test with index " + f);
+      test.tests = [];
+    } else {
+      test.tests = [ test.tests[f] ];
     }
-
-    if (process.argv.includes("--testindex")) {
-      let f = process.argv[process.argv.indexOf("--testindex") + 1];
-      if (test.tests.length - 1 < f){
-        console.log("No test with index " + f);
-        test.tests = [];
-      } else {
-        test.tests = [ test.tests[f] ];
-      }
-    }
-    if (test.tests.length > 0) {
-    p = p.then(()=>{
-      const testName = test.app + (test.description ? ` - ${test.description}` : '');
-      return withTimeout(runTest(test, testState), TEST_TIMEOUT_MS, testName)
-        .catch(err => {
-          if (err.isTimeout) {
-            console.log("> TIMEOUT:", err.message);
-            // Clean up emulator state after timeout
-            try {
-              emu.stopIdle();
-            } catch (e) {
-              console.error("Failed to stop emulator after timeout:", e.message);
-            }
-            testState.push({
-              app: test.app,
-              number: -1,
-              result: "TIMEOUT",
-              description: "Test timed out",
-              error: err.message
-            });
-          } else {
-            throw err;
+  }
+  if (test.tests.length > 0) {
+  p = p.then(()=>{
+    const testName = test.app + (test.description ? ` - ${test.description}` : '');
+    return withTimeout(runTest(test, testState), TEST_TIMEOUT_MS, testName)
+      .catch(err => {
+        if (err.isTimeout) {
+          console.log("> TIMEOUT:", err.message);
+          // Clean up emulator state after timeout
+          try {
+            emu.stopIdle();
+          } catch (e) {
+            console.error("Failed to stop emulator after timeout:", e.message);
           }
-        });
+          testState.push({
+            app: test.app,
+            number: -1,
+            result: "TIMEOUT",
+            description: "Test timed out",
+            error: err.message
+          });
+        } else {
+          throw err;
+        }
       });
-    }
-  });
-  p.finally(()=>{
-    console.log("\n\n");
-    console.log("Overall results:");
-    console.table(testState);
+    });
+  }
+});
+p.finally(()=>{
+  console.log("\n\n");
+  console.log("Overall results:");
+  console.table(testState);
 
-    // Exit with appropriate code - count failures and timeouts
-    const exitCode = testState.reduce((a, c) => {
-      return a || ((c.result === "SUCCESS") ? 0 : 1);
-    }, 0);
+  // Exit with appropriate code - count failures and timeouts
+  const exitCode = testState.reduce((a, c) => {
+    return a || ((c.result === "SUCCESS") ? 0 : 1);
+  }, 0);
 
-    process.exit(exitCode);
-  });
-  return p;
+  process.exit(exitCode);
 });
 
 /*
