@@ -278,8 +278,9 @@ const showCall = function(msg) {
   if (!isQuiet()) {
     if (msg.new) {
       msg.new = false;
-      if (callBuzzTimer) clearInterval(callBuzzTimer);
-      callBuzzTimer = setInterval(function() {
+      LOG("Setting call buzz interval")
+      callBuzzInterval = setInterval(function() {
+        LOG("Buzzing now");
         Bangle.buzz(500);
       }, 1000);
 
@@ -307,11 +308,12 @@ const next = function() {
   return true;
 };
 
-let callBuzzTimer = null;
+let callBuzzInterval = null;
 const stopCallBuzz = function() {
-  if (callBuzzTimer) {
-    clearInterval(callBuzzTimer);
-    callBuzzTimer = undefined;
+  if (callBuzzInterval) {
+    LOG("Stopping call buzz interval");
+    clearInterval(callBuzzInterval);
+    callBuzzInterval = undefined;
   }
 };
 
@@ -624,9 +626,15 @@ const backupHandlers = function(){
 };
 
 const cleanup = function(){
+  LOG("Cleanup")
   if (lockListener) {
     Bangle.removeListener("lock", lockListener);
     lockListener = undefined;
+  }
+  stopCallBuzz();
+  if (clearingTimeout) {
+    clearTimeout(clearingTimeout);
+    clearingTimeout = undefined;
   }
   restoreHandlers();
 
@@ -671,9 +679,10 @@ const updateClearingTimeout = ()=>{
   LOG("Remove clearing timeout", clearingTimeout);
   if (clearingTimeout) clearTimeout(clearingTimeout);
   if (Bangle.isLocked()){
-    LOG("Set new clearing timeout");
+    let clearingTimeoutValue = settings.autoclear * 1000;
+    LOG("Set new clearing timeout " + clearingTimeoutValue);
     clearingTimeout = setTimeout(()=>{
-      LOG("setNewTimeout");
+      LOG("Clearing timeout triggered");
       const event = eventQueue.pop();
       if (event)
         showMessage(event);
@@ -683,7 +692,7 @@ const updateClearingTimeout = ()=>{
       } else {
         cleanup();
       }
-    }, settings.autoclear * 1000);
+    }, clearingTimeoutValue);
   } else {
     clearingTimeout = undefined;
   }
