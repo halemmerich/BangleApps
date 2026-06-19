@@ -494,7 +494,7 @@ const backupPrependListener = function(event, handler){
 const origClearWatch = clearWatch;
 const backupClearWatch = function(w) {
   if (w)
-    backup.watches[w] = null;
+    backup.watches[w-1] = null;
   else
     backup.watches = [];
 };
@@ -521,9 +521,10 @@ const backupRemove = function(event, handler){
 
 const origRemoveAll = Bangle.removeAllListeners;
 const backupRemoveAll = function(event){
-  if (backup[event])
+  if (EVENTS.includes[event])
     backup[event] = undefined;
-  origRemoveAll.call(Bangle);
+  else
+    origRemoveAll.call(Bangle, event);
 };
 
 const restoreHandlers = function(){
@@ -535,9 +536,15 @@ const restoreHandlers = function(){
   for (const event of EVENTS){
     LOG("Restore", backup[event]);
     origRemoveAll.call(Bangle, event);
-    if (backup[event] && backup[event].length == 1)
-      backup[event] = backup[event][0];
-    Bangle["#on" + event]=backup[event];
+    //if (backup[event] && backup[event].length == 1)
+   //   backup[event] = backup[event][0];
+   // Bangle["#on" + event]=backup[event];
+    let handlers = backup[event];
+    if (handlers) {
+      if(typeof handlers == "function") handlers =[handlers];
+      for (const h of handlers) origOn.call(Bangle, event, h);
+    }
+
     backup[event] = undefined;
   }
 
@@ -641,6 +648,8 @@ const cleanup = function(){
   Bangle.setLCDOverlay(undefined, {id: "messagesoverlay"});
   ovr = undefined;
   overlayShowing = false;
+  callInProgress = false;
+  buzzing=false; 
 };
 
 const backup = {};
