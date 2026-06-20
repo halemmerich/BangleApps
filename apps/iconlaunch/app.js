@@ -116,8 +116,7 @@
     select: selectItem,
     remove: function() {
       if (timeout) clearTimeout(timeout);
-      Bangle.removeListener("drag", updateTimeout);
-      Bangle.removeListener("touch", updateTimeout);
+      Bangle.removeListener("lock", lockHandler);
       Bangle.removeListener("swipe", swipeHandler);
       if (settings.fullscreen) { // for fast-load, if we hid widgets then we should show them again
         require("widget_utils").show();
@@ -140,10 +139,11 @@
   firstRun = false; // this stops us flipping the screen after each line we draw
 
   let timeout;
-  const updateTimeout = function(){
-    if (settings.timeOut!="Off"){
+  let lockHandler = function(locked){
+    if (timeout) clearTimeout(timeout);
+    timeout = undefined;
+    if (locked){
       let time=parseInt(settings.timeOut);  //the "s" will be trimmed by the parseInt
-      if (timeout) clearTimeout(timeout);
       timeout = setTimeout(Bangle.showClock,time*1000);
     }
   };
