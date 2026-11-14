@@ -1,0 +1,399 @@
+{
+  "title": "BevTrack Tests",
+  "description": "Tests for the BevTrack library and SwipeUI module",
+  "app": "bevtrack",
+  "tests": [
+    {
+      "description": "Get beverage types",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').getBeverageTypes()", "eq": ["coffee", "tea", "beer", "wine", "shot", "energy", "cola", "custom"]}
+      ]
+    },
+    {
+      "description": "Get beverage names",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').getBeverageNames()", "eq": {"coffee": "Coffee", "tea": "Tea", "beer": "Beer", "wine": "Wine", "shot": "Shot", "energy": "Energy", "cola": "Cola", "custom": "Custom"}}
+      ]
+    },
+    {
+      "description": "Get beverage info for coffee",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').getBeverageInfo('coffee')", "eq": {"name": "Coffee", "caffeine": 80, "alcohol": 0, "color": 0}}
+      ]
+    },
+    {
+      "description": "Get beverage info for wine",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').getBeverageInfo('wine')", "eq": {"name": "Wine", "caffeine": 0, "alcohol": 16, "color": 63519}}
+      ]
+    },
+    {
+      "description": "Get beverage info for invalid type",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').getBeverageInfo('soda')", "is": "equal", "to": "null"}
+      ]
+    },
+    {
+      "description": "Calculate caffeine in coffee",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateCaffeine('coffee', 200)", "is": "equal", "to": "160"}
+      ]
+    },
+    {
+      "description": "Calculate caffeine in tea",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateCaffeine('tea', 150)", "is": "equal", "to": "45"}
+      ]
+    },
+    {
+      "description": "Calculate caffeine in energy drink",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateCaffeine('energy', 250)", "is": "equal", "to": "250"}
+      ]
+    },
+    {
+      "description": "Calculate caffeine in beer",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateCaffeine('beer', 330)", "is": "equal", "to": "33"}
+      ]
+    },
+    {
+      "description": "Calculate caffeine for invalid type",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateCaffeine('soda', 200)", "is": "equal", "to": "0"}
+      ]
+    },
+    {
+      "description": "Calculate alcohol in beer",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateAlcohol('beer', 500)", "is": "equal", "to": "60"}
+      ]
+    },
+    {
+      "description": "Calculate alcohol in wine",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateAlcohol('wine', 175)", "is": "equal", "to": "28"}
+      ]
+    },
+    {
+      "description": "Calculate alcohol in shot",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateAlcohol('shot', 44)", "is": "equal", "to": "2.464"}
+      ]
+    },
+    {
+      "description": "Calculate alcohol for invalid type",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateAlcohol('soda', 200)", "is": "equal", "to": "0"}
+      ]
+    },
+    {
+      "description": "Parse log line with all fields",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').parseLogLine('2024-01-01T10:00:00.000Z|coffee|200|160|0|Morning coffee')", "eq": {"timestamp": "2024-01-01T10:00:00.000Z", "type": "coffee", "volume": 200, "caffeine": 160, "alcohol": 0, "notes": "Morning coffee"}}
+      ]
+    },
+    {
+      "description": "Parse log line without notes",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').parseLogLine('2024-01-01T10:00:00.000Z|wine|175|0|16|')", "eq": {"timestamp": "2024-01-01T10:00:00.000Z", "type": "wine", "volume": 175, "caffeine": 0, "alcohol": 16, "notes": ""}}
+      ]
+    },
+    {
+      "description": "Parse invalid log line",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').parseLogLine('invalid')", "is": "equal", "to": "null"}
+      ]
+    },
+    {
+      "description": "Parse empty log line",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').parseLogLine('')", "is": "equal", "to": "null"}
+      ]
+    },
+    {
+      "description": "Format parsed entry back to log line",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').formatLogLine({timestamp: '2024-01-01T10:00:00.000Z', type: 'coffee', volume: 200, caffeine: 160, alcohol: 0, notes: 'Morning'})", "is": "equal", "to": "\"2024-01-01T10:00:00.000Z|coffee|200|160|0|Morning\""}
+      ]
+    },
+    {
+      "description": "Format entry without notes",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').formatLogLine({timestamp: '2024-01-01T10:00:00.000Z', type: 'wine', volume: 175, caffeine: 0, alcohol: 16})", "is": "equal", "to": "\"2024-01-01T10:00:00.000Z|wine|175|0|16|\""}
+      ]
+    },
+    {
+      "description": "Calculate BAC with multiple drinks",
+      "steps": [
+        {"t": "eval", "js": "(function(r){r.bac = Math.round(r.bac * 1e6) / 1e6; return r;})(require('bevtrack').calculateBAC([{timestamp: '2024-01-01T10:00:00.000Z', alcohol: 12}, {timestamp: '2024-01-01T11:00:00.000Z', alcohol: 12}], {weight: 70, gender: 'male'}, new Date('2024-01-01T12:00:00.000Z')))", "eq": {"bac": 0.189796, "hours": 2, "totalAlcohol": 24, "firstDrinkTime": "2024-01-01T10:00:00.000Z", "genderFactor": 0.7, "weight": 70}}
+      ]
+    },
+    {
+      "description": "Calculate BAC for female",
+      "steps": [
+        {"t": "eval", "js": "(function(r){r.bac = Math.round(r.bac * 1e6) / 1e6; return r;})(require('bevtrack').calculateBAC([{timestamp: '2024-01-01T10:00:00.000Z', alcohol: 16}], {weight: 60, gender: 'female'}, new Date('2024-01-01T12:00:00.000Z')))", "eq": {"bac": 0.144444, "hours": 2, "totalAlcohol": 16, "firstDrinkTime": "2024-01-01T10:00:00.000Z", "genderFactor": 0.6, "weight": 60}}
+      ]
+    },
+    {
+      "description": "Calculate BAC with no alcohol",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').calculateBAC([{timestamp: '2024-01-01T10:00:00.000Z', alcohol: 0}], {weight: 70, gender: 'male'}, new Date('2024-01-01T12:00:00.000Z'))", "eq": {"bac": 0, "hours": 0, "totalAlcohol": 0, "firstDrinkTime": null}}
+      ]
+    },
+    {
+      "description": "Calculate remaining caffeine",
+      "steps": [
+        {"t": "eval", "js": "(function(r){r.remaining = Math.round(r.remaining * 1e4) / 1e4; return r;})(require('bevtrack').calculateRemainingCaffeine([{timestamp: '2024-01-01T10:00:00.000Z', caffeine: 160}], new Date('2024-01-01T12:00:00.000Z')))", "eq": {"total": 160, "remaining": 121.2573, "halfLifeHours": 5}}
+      ]
+    },
+    {
+      "description": "Calculate remaining caffeine with multiple drinks",
+      "steps": [
+        {"t": "eval", "js": "(function(r){r.remaining = Math.round(r.remaining * 1e4) / 1e4; return r;})(require('bevtrack').calculateRemainingCaffeine([{timestamp: '2024-01-01T10:00:00.000Z', caffeine: 160}, {timestamp: '2024-01-01T11:00:00.000Z', caffeine: 45}], new Date('2024-01-01T12:00:00.000Z')))", "eq": {"total": 205, "remaining": 160.4321, "halfLifeHours": 5}}
+      ]
+    },
+    {
+      "description": "Load entries from missing file",
+      "steps": [
+        {"t": "assertArray", "js": "require('bevtrack').loadEntries('bevtrack_missing.dat')", "is": "undefinedOrEmpty"}
+      ]
+    },
+    {
+      "description": "Save and load an entry",
+      "steps": [
+        {"t": "cmd", "js": "require('Storage').open('bevtrack_test.dat', 'r').erase()"},
+        {"t": "assert", "js": "require('bevtrack').saveEntry('bevtrack_test.dat', {timestamp: '2024-01-01T10:00:00.000Z', type: 'coffee', volume: 200, caffeine: 160, alcohol: 0})", "is": "equal", "to": "true"},
+        {"t": "assert", "js": "require('bevtrack').loadEntries('bevtrack_test.dat').length", "is": "equal", "to": "1"},
+        {"t": "assert", "js": "require('bevtrack').loadEntries('bevtrack_test.dat')[0].type", "is": "equal", "to": "\"coffee\""}
+      ]
+    },
+    {
+      "description": "Delete a log entry",
+      "steps": [
+        {"t": "cmd", "js": "require('Storage').open('bevtrack_del.dat', 'r').erase()"},
+        {"t": "cmd", "js": "require('bevtrack').saveEntry('bevtrack_del.dat', {timestamp: '2024-01-01T10:00:00.000Z', type: 'coffee', volume: 200, caffeine: 160, alcohol: 0}); require('bevtrack').saveEntry('bevtrack_del.dat', {timestamp: '2024-01-01T11:00:00.000Z', type: 'beer', volume: 500, caffeine: 50, alcohol: 60});"},
+        {"t": "assert", "js": "require('bevtrack').deleteEntry('bevtrack_del.dat', '2024-01-01T10:00:00.000Z')", "is": "equal", "to": "true"},
+        {"t": "eval", "js": "(function(){var e = require('bevtrack').loadEntries('bevtrack_del.dat'); return [e.length, e[0].type, e[0].volume];})()", "eq": [1, "beer", 500]}
+      ]
+    },
+    {
+      "description": "Delete missing log entry returns false",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').deleteEntry('bevtrack_missing.dat', '2024-01-01T10:00:00.000Z')", "is": "equal", "to": "false"}
+      ]
+    },
+    {
+      "description": "Get recent entries from strings",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').getRecentEntries(['2024-01-01T10:00:00.000Z', '2024-01-01T09:00:00.000Z', '2024-01-01T08:00:00.000Z'], 2)", "eq": ["2024-01-01T10:00:00.000Z", "2024-01-01T09:00:00.000Z"]}
+      ]
+    },
+    {
+      "description": "Get recent entries from objects",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').getRecentEntries([{timestamp: '2024-01-01T10:00:00.000Z', type: 'coffee'}], 1)", "eq": [{"timestamp": "2024-01-01T10:00:00.000Z", "type": "coffee"}]}
+      ]
+    },
+    {
+      "description": "Group entries by date",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').groupEntriesByDate([require('bevtrack').parseLogLine('2024-01-01T10:00:00.000Z|coffee|200|160|0|'), require('bevtrack').parseLogLine('2024-01-02T10:00:00.000Z|wine|175|0|16|')])", "eq": {"2024-01-02": [{"timestamp": "2024-01-02T10:00:00.000Z", "type": "wine", "volume": 175, "caffeine": 0, "alcohol": 16, "notes": ""}], "2024-01-01": [{"timestamp": "2024-01-01T10:00:00.000Z", "type": "coffee", "volume": 200, "caffeine": 160, "alcohol": 0, "notes": ""}]}}
+      ]
+    },
+    {
+      "description": "Get entries in date range",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').getEntriesInRange([require('bevtrack').parseLogLine('2024-01-01T10:00:00.000Z|coffee|200|160|0|'), require('bevtrack').parseLogLine('2024-01-02T10:00:00.000Z|coffee|200|160|0|')], new Date('2024-01-01'), new Date('2024-01-03'))", "eq": [{"timestamp": "2024-01-02T10:00:00.000Z", "type": "coffee", "volume": 200, "caffeine": 160, "alcohol": 0, "notes": ""}, {"timestamp": "2024-01-01T10:00:00.000Z", "type": "coffee", "volume": 200, "caffeine": 160, "alcohol": 0, "notes": ""}]}
+      ]
+    },
+    {
+      "description": "Get total alcohol in date range",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').getTotalAlcohol([require('bevtrack').parseLogLine('2024-01-01T10:00:00.000Z|wine|175|0|16|'), require('bevtrack').parseLogLine('2024-01-02T10:00:00.000Z|beer|330|10|12|')], new Date('2024-01-01'), new Date('2024-01-03'))", "is": "equal", "to": "28"}
+      ]
+    },
+    {
+      "description": "Get total caffeine in date range",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').getTotalCaffeine([require('bevtrack').parseLogLine('2024-01-01T10:00:00.000Z|coffee|200|160|0|'), require('bevtrack').parseLogLine('2024-01-02T10:00:00.000Z|tea|150|45|0|')], new Date('2024-01-01'), new Date('2024-01-03'))", "is": "equal", "to": "205"}
+      ]
+    },
+    {
+      "description": "Get entries by type",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').getEntriesByType([require('bevtrack').parseLogLine('2024-01-01T10:00:00.000Z|coffee|200|160|0|'), require('bevtrack').parseLogLine('2024-01-02T10:00:00.000Z|coffee|200|160|0|'), require('bevtrack').parseLogLine('2024-01-02T10:00:00.000Z|wine|175|0|16|')], 'coffee')", "eq": [{"timestamp": "2024-01-02T10:00:00.000Z", "type": "coffee", "volume": 200, "caffeine": 160, "alcohol": 0, "notes": ""}, {"timestamp": "2024-01-01T10:00:00.000Z", "type": "coffee", "volume": 200, "caffeine": 160, "alcohol": 0, "notes": ""}]}
+      ]
+    },
+    {
+      "description": "Calculate single drink BAC",
+      "steps": [
+        {"t": "eval", "js": "Math.round(require('bevtrack').calculateSingleDrinkBAC(70, 'male', 'beer', 330, new Date('2024-01-01T09:00:00.000Z'), new Date('2024-01-01T12:00:00.000Z')) * 1e6) / 1e6", "eq": 0.358163}
+      ]
+    },
+    {
+      "description": "Calculate single drink caffeine",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').calculateSingleDrinkCaffeine(200, 'coffee', new Date('2024-01-01T09:00:00.000Z'), new Date('2024-01-01T12:00:00.000Z'))", "is": "equal", "to": "105.56063286183154"}
+      ]
+    },
+    {
+      "description": "Get library version",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').BEV_TRACK_LIB_VERSION", "is": "equal", "to": "\"0.0.1\""}
+      ]
+    },
+    {
+      "description": "Load settings merges saved values",
+      "steps": [
+        {"t": "jsonfile", "name": "bevtrack_test.settings.json", "json": {"weight": 85, "gender": "female"}},
+        {"t": "assert", "js": "require('bevtrack').loadSettings('bevtrack_test.settings.json', {weight: 70, gender: 'male', unit: 'metric'}).weight", "is": "equal", "to": "85"},
+        {"t": "assert", "js": "require('bevtrack').loadSettings('bevtrack_test.settings.json', {weight: 70, gender: 'male', unit: 'metric'}).gender", "is": "equal", "to": "\"female\""},
+        {"t": "assert", "js": "require('bevtrack').loadSettings('bevtrack_test.settings.json', {weight: 70, gender: 'male', unit: 'metric'}).unit", "is": "equal", "to": "\"metric\""}
+      ]
+    },
+    {
+      "description": "Load settings uses defaults for missing file",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').loadSettings('bevtrack_missing.json', {weight: 70}).weight", "is": "equal", "to": "70"}
+      ]
+    },
+    {
+      "description": "Get summary for date range",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack').getSummary([require('bevtrack').parseLogLine('2024-01-01T10:00:00.000Z|coffee|200|160|0|'), require('bevtrack').parseLogLine('2024-01-02T10:00:00.000Z|wine|175|0|16|')], new Date('2024-01-01'), new Date('2024-01-03'))", "eq": {"totalDrinks": 2, "totalCaffeine": 160, "totalAlcohol": 16}}
+      ]
+    },
+    {
+      "description": "Get default volume per drink",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').getDefaultVolume('wine')", "is": "equal", "to": "175"},
+        {"t": "assert", "js": "require('bevtrack').getDefaultVolume('beer')", "is": "equal", "to": "500"},
+        {"t": "assert", "js": "require('bevtrack').getDefaultVolume('custom')", "is": "equal", "to": "250"},
+        {"t": "assert", "js": "require('bevtrack').getDefaultVolume('soda')", "is": "equal", "to": "250"}
+      ]
+    },
+    {
+      "description": "Get volume step per drink",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').getVolumeStep('shot')", "is": "equal", "to": "5"},
+        {"t": "assert", "js": "require('bevtrack').getVolumeStep('beer')", "is": "equal", "to": "50"},
+        {"t": "assert", "js": "require('bevtrack').getVolumeStep('soda')", "is": "equal", "to": "25"}
+      ]
+    },
+    {
+      "description": "Settings menu uses numeric gender and unit values",
+      "steps": [
+        {"t": "cmd", "js": "global.__menu = null; E.showMenu = function(m) { global.__menu = m; }; eval(require('Storage').read('bevtrack.settings.js'))(function(){});"},
+        {"t": "assert", "js": "global.__menu['Gender'].value", "is": "equal", "to": "0"},
+        {"t": "assert", "js": "global.__menu['Units'].value", "is": "equal", "to": "0"},
+        {"t": "assert", "js": "global.__menu['Gender'].format(1)", "is": "equal", "to": "\"Female\""},
+        {"t": "assert", "js": "global.__menu['Units'].format(1)", "is": "equal", "to": "\"Imperial\""}
+      ]
+    },
+    {
+      "description": "Settings menu writes gender and unit changes",
+      "steps": [
+        {"t": "cmd", "js": "global.__menu = null; E.showMenu = function(m) { global.__menu = m; }; eval(require('Storage').read('bevtrack.settings.js'))(function(){}); global.__menu['Gender'].onchange(1); global.__menu['Units'].onchange(1);"},
+        {"t": "assert", "js": "require('Storage').readJSON('bevtrack.settings.json', 1).gender", "is": "equal", "to": "\"female\""},
+        {"t": "assert", "js": "require('Storage').readJSON('bevtrack.settings.json', 1).unit", "is": "equal", "to": "\"imperial\""}
+      ]
+    },
+    {
+      "description": "Parse log line preserves fractional alcohol",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').parseLogLine('2024-01-01T10:00:00.000Z|shot|44|0|2.464|').alcohol", "is": "equal", "to": "2.464"}
+      ]
+    },
+    {
+      "description": "Calculate BAC defaults to current time",
+      "steps": [
+        {"t": "eval", "js": "(function(){var h=require('bevtrack').calculateBAC([{timestamp: new Date(Date.now()-3600000).toISOString(), alcohol: 16}], {weight: 70, gender: 'male'}).hours; return h > 0.9 && h < 1.1;})()", "eq": true}
+      ]
+    },
+    {
+      "description": "Calculate remaining caffeine defaults to current time",
+      "steps": [
+        {"t": "eval", "js": "(function(){var r=require('bevtrack').calculateRemainingCaffeine([{timestamp: new Date(Date.now()-5*3600000).toISOString(), caffeine: 160}]).remaining; return r > 75 && r < 85;})()", "eq": true}
+      ]
+    },
+    {
+      "description": "SwipeUI getDrinkName",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack.swipeui').getDrinkName('coffee')", "is": "equal", "to": "\"Coffee\""},
+        {"t": "assert", "js": "require('bevtrack.swipeui').getDrinkName('unknown')", "is": "equal", "to": "\"unknown\""}
+      ]
+    },
+    {
+      "description": "SwipeUI getDrinkIcon",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack.swipeui').getDrinkIcon('coffee')", "is": "equal", "to": "0"},
+        {"t": "assert", "js": "require('bevtrack.swipeui').getDrinkIcon('unknown')", "is": "equal", "to": "65535"}
+      ]
+    },
+    {
+      "description": "SwipeUI getDrinkIndex",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack.swipeui').getDrinkIndex('coffee')", "is": "equal", "to": "0"},
+        {"t": "assert", "js": "require('bevtrack.swipeui').getDrinkIndex('custom')", "is": "equal", "to": "7"},
+        {"t": "assert", "js": "require('bevtrack.swipeui').getDrinkIndex('soda')", "is": "equal", "to": "-1"}
+      ]
+    },
+    {
+      "description": "SwipeUI default settings",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack.swipeui').getSettings().weight", "is": "equal", "to": "70"},
+        {"t": "assert", "js": "require('bevtrack.swipeui').getSettings().gender", "is": "equal", "to": "\"male\""}
+      ]
+    },
+    {
+      "description": "SwipeUI BAC and caffeine with no entries",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack.swipeui').getBACValue()", "is": "equal", "to": "0"},
+        {"t": "assert", "js": "require('bevtrack.swipeui').getCaffeineValue()", "is": "equal", "to": "0"}
+      ]
+    },
+    {
+      "description": "SwipeUI summary with no entries",
+      "steps": [
+        {"t": "eval", "js": "require('bevtrack.swipeui').getSummary()", "eq": {"totalDrinks": 0, "totalCaffeine": 0, "totalAlcohol": 0}}
+      ]
+    },
+    {
+      "description": "SwipeUI loadData keeps default settings",
+      "steps": [
+        {"t": "cmd", "js": "require('bevtrack.swipeui').loadData()"},
+        {"t": "assert", "js": "require('bevtrack.swipeui').getSettings().weight", "is": "equal", "to": "70"}
+      ]
+    },
+    {
+      "description": "SwipeUI loadEntries reads stored entries",
+      "steps": [
+        {"t": "cmd", "js": "require('Storage').open('bevtrack_entries.dat', 'w').write(new Date().toISOString() + '|coffee|200|160|0|\\n')"},
+        {"t": "cmd", "js": "require('bevtrack.swipeui').loadEntries()"},
+        {"t": "eval", "js": "require('bevtrack.swipeui').getSummary()", "eq": {"totalDrinks": 1, "totalCaffeine": 160, "totalAlcohol": 0}}
+      ]
+    },
+    {
+      "description": "SwipeUI loadSettings reads stored settings",
+      "steps": [
+        {"t": "jsonfile", "name": "bevtrack.settings.json", "json": {"weight": 90}},
+        {"t": "cmd", "js": "require('bevtrack.swipeui').loadSettings()"},
+        {"t": "assert", "js": "require('bevtrack.swipeui').getSettings().weight", "is": "equal", "to": "90"}
+      ]
+    },
+    {
+      "description": "SwipeUI navigation does not throw",
+      "steps": [
+        {"t": "assert", "js": "(require('bevtrack.swipeui').handleSwipeLeft(), true)", "is": "true"},
+        {"t": "assert", "js": "(require('bevtrack.swipeui').handleSwipeRight(), true)", "is": "true"}
+      ]
+    },
+    {
+      "description": "SwipeUI version",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack.swipeui').SWIPEUI_VERSION", "is": "equal", "to": "\"0.0.1\""}
+      ]
+    }
+  ]
+}

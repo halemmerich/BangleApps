@@ -1,0 +1,22 @@
+{
+  "id": "bevtrack",
+  "name": "BevTrack",
+  "shortName": "BevTrack",
+  "version": "0.01",
+  "author": "Espruino",
+  "description": "Track beverages and calculate active components (caffeine, alcohol) over time. Compact storage with one line per entry.",
+  "tags": "health,tool",
+  "allow_emulator": true,
+  "supports": ["BANGLEJS2"],
+  "readme": "README.md",
+  "storage": [
+    {"name": "bevtrack.app.js", "url": "app.js"},
+    {"name": "bevtrack", "url": "lib.js"},
+    {"name": "bevtrack.swipeui", "url": "swipeui.js"},
+    {"name": "bevtrack.settings.js", "url": "settings.js"}
+  ],
+  "data": [
+    {"name": "bevtrack_entries.dat"},
+    {"name": "bevtrack.settings.json"}
+  ]
+}
