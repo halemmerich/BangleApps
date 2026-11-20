@@ -92,6 +92,27 @@ exports.calculateRemainingCaffeine = function (entries, now) {
   return {total: totalCaffeine, remaining: remaining, halfLifeHours: 5};
 };
 
+// Maximum caffeine still in the body that is considered fine for sleep.
+// Approximate, derived from body weight and gender.
+exports.getCaffeineSleepLimit = function (settings) {
+  settings = settings || {};
+  let weight = settings.weight || 70;
+  let mgPerKg = settings.gender === "female" ? 0.8 : 1.0;
+  return weight * mgPerKg;
+};
+
+exports.getCaffeineSleepStatus = function (entries, settings, now) {
+  let remaining = exports.calculateRemainingCaffeine(entries, now).remaining;
+  let limit = exports.getCaffeineSleepLimit(settings);
+  let over = remaining > limit;
+  // Exponential decay: time until remaining reaches the limit
+  let hoursUntilUnder = 0;
+  if (over && limit > 0) {
+    hoursUntilUnder = 5 * Math.log(remaining / limit) / Math.log(2);
+  }
+  return {remaining: remaining, limit: limit, over: over, hoursUntilUnder: hoursUntilUnder};
+};
+
 exports.calculateCaffeine = function (type, volume) {
   let bev = exports.BEVERAGES[type];
   if (!bev) return 0;

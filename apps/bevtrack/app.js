@@ -145,17 +145,21 @@ function drawCurrentScreen() {
   drawHeader(SCREEN_TITLES[1]);
 
   var bac = require('bevtrack').calculateBAC(entries, settings);
-  var caff = require('bevtrack').calculateRemainingCaffeine(entries);
+  var caff = require('bevtrack').getCaffeineSleepStatus(entries, settings);
 
   drawPanel(8, 26, 168, 68, "Blood Alcohol", bac.bac.toFixed(3) + "%",
             bac.bac < 0.05 ? ACCENT_GREEN : ACCENT_RED);
   drawPanel(8, 74, 168, 116, "Caffeine remaining", Math.round(caff.remaining) + " mg",
-            ACCENT_GREEN);
+            caff.over ? ACCENT_RED : ACCENT_GREEN);
 
-  g.setColor(THEME.fg);
+  g.setColor(THEME.fg2);
   g.setFont("6x8").setFontAlign(0, 0);
-  g.drawString("Total caffeine: " + Math.round(caff.total) + " mg", W / 2, 130);
-  g.drawString("Drinks logged: " + entries.length, W / 2, 144);
+  g.drawString("Sleep limit: " + Math.round(caff.limit) + " mg", W / 2, 130);
+  g.setColor(caff.over ? ACCENT_RED : ACCENT_GREEN);
+  var sleepText = caff.over
+    ? "Under limit in " + caff.hoursUntilUnder.toFixed(1) + "h"
+    : "OK for sleep";
+  g.drawString(sleepText, W / 2, 144);
 }
 
 // ===== SCREEN 2: LAST DRINKS =====

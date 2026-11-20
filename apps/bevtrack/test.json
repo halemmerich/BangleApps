@@ -282,6 +282,26 @@
       ]
     },
     {
+      "description": "Caffeine sleep limit depends on body properties",
+      "steps": [
+        {"t": "assert", "js": "require('bevtrack').getCaffeineSleepLimit({weight: 70, gender: 'male'})", "is": "equal", "to": "70"},
+        {"t": "assert", "js": "require('bevtrack').getCaffeineSleepLimit({weight: 70, gender: 'female'})", "is": "equal", "to": "56"},
+        {"t": "assert", "js": "require('bevtrack').getCaffeineSleepLimit({weight: 90, gender: 'male'})", "is": "equal", "to": "90"},
+        {"t": "assert", "js": "require('bevtrack').getCaffeineSleepLimit({})", "is": "equal", "to": "70"}
+      ]
+    },
+    {
+      "description": "Caffeine sleep status flags when over the limit",
+      "steps": [
+        {"t": "eval", "js": "(function(){var e=[{timestamp:'2024-01-01T00:00:00.000Z',caffeine:100}]; var now=new Date('2024-01-01T05:00:00.000Z'); var s=require('bevtrack').getCaffeineSleepStatus(e,{weight:70,gender:'male'},now); return [Math.round(s.remaining), s.limit, s.over];})()", "eq": [50, 70, false]},
+        {"t": "eval", "js": "(function(){var e=[{timestamp:'2024-01-01T00:00:00.000Z',caffeine:100}]; var now=new Date('2024-01-01T05:00:00.000Z'); var s=require('bevtrack').getCaffeineSleepStatus(e,{weight:70,gender:'female'},now); return [Math.round(s.remaining), s.limit, s.over];})()", "eq": [50, 56, false]},
+        {"t": "eval", "js": "(function(){var e=[{timestamp:'2024-01-01T00:00:00.000Z',caffeine:200}]; var now=new Date('2024-01-01T05:00:00.000Z'); var s=require('bevtrack').getCaffeineSleepStatus(e,{weight:70,gender:'female'},now); return [Math.round(s.remaining), s.limit, s.over];})()", "eq": [100, 56, true]},
+        {"t": "assert", "js": "Math.round(require('bevtrack').getCaffeineSleepStatus([{timestamp:'2024-01-01T00:00:00.000Z',caffeine:200}],{weight:70,gender:'female'},new Date('2024-01-01T05:00:00.000Z')).hoursUntilUnder * 10) / 10", "is": "equal", "to": "4.2"},
+        {"t": "assert", "js": "Math.round(require('bevtrack').getCaffeineSleepStatus([{timestamp:'2024-01-01T00:00:00.000Z',caffeine:200}],{weight:70,gender:'male'},new Date('2024-01-01T05:00:00.000Z')).hoursUntilUnder * 10) / 10", "is": "equal", "to": "2.6"},
+        {"t": "assert", "js": "require('bevtrack').getCaffeineSleepStatus([{timestamp:'2024-01-01T00:00:00.000Z',caffeine:20}],{weight:70,gender:'male'},new Date('2024-01-01T05:00:00.000Z')).hoursUntilUnder", "is": "equal", "to": "0"}
+      ]
+    },
+    {
       "description": "Settings menu uses numeric gender and unit values",
       "steps": [
         {"t": "cmd", "js": "global.__menu = null; E.showMenu = function(m) { global.__menu = m; }; eval(require('Storage').read('bevtrack.settings.js'))(function(){});"},

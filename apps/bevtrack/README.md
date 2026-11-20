@@ -51,7 +51,9 @@ Swipe up or down to move through the screens.
 - Each drink starts at a typical serving size (for example 500 ml beer, 175 ml wine, 44 ml shot)
 
 ### Now Screen
-Shows current BAC and remaining caffeine.
+Shows current BAC and remaining caffeine. The caffeine figure turns red when it is
+above your sleep limit (approximate, based on weight and gender) and shows how many
+hours remain until it drops below that limit.
 
 ### Log Screen
 Shows your most recent drinks with timestamps. Tap an entry to delete it; a dialog shows the drink and time before you confirm.
