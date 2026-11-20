@@ -302,6 +302,15 @@
       ]
     },
     {
+      "description": "Now screen refreshes every minute",
+      "steps": [
+        {"t": "cmd", "js": "Bangle.load('bevtrack.app.js');"},
+        {"t": "cmd", "js": "global.__draws = 0; global.__origDraw = g.drawString; g.drawString = function(s, x, y) { if (s === 'Caffeine remaining') global.__draws++; return global.__origDraw.call(g, s, x, y); }; Bangle.touchHandler(1, {x: 66, y: 170}); global.__draws = 0;"},
+        {"t": "advanceTimers", "ms": 60000},
+        {"t": "assert", "js": "global.__draws > 0", "is": "true"}
+      ]
+    },
+    {
       "description": "Settings menu uses numeric gender and unit values",
       "steps": [
         {"t": "cmd", "js": "global.__menu = null; E.showMenu = function(m) { global.__menu = m; }; eval(require('Storage').read('bevtrack.settings.js'))(function(){});"},

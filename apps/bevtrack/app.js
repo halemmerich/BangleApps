@@ -349,7 +349,15 @@ function handleSwipe(lr, ud) {
 loadData();
 render();
 
+var refreshTimer;
+
+function refreshNow() {
+  if (currentScreen === 1) render();
+}
+
 function setupUI() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(refreshNow, 60000);
   Bangle.setUI({
     mode: "custom",
     touch: handleTouch,
@@ -357,6 +365,10 @@ function setupUI() {
     drag: function (e) {
       lastPos.x = e.x;
       lastPos.y = e.y;
+    },
+    remove: function () {
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = undefined;
     }
   });
 }
