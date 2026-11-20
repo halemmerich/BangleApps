@@ -54,7 +54,7 @@ Swipe up or down to move through the screens.
 Shows current BAC and remaining caffeine.
 
 ### Log Screen
-Shows your most recent drinks with timestamps. Tap an entry to delete it.
+Shows your most recent drinks with timestamps. Tap an entry to delete it; a dialog shows the drink and time before you confirm.
 
 ### Day Screen
 Shows drink, caffeine and alcohol totals for the last 7 days.

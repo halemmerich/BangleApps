@@ -306,14 +306,25 @@ function handleTouch(button, xy) {
     for (var i = 0; i < recent.length; i++) {
       var top = 24 + i * 26;
       if (y >= top && y <= top + 24) {
-        if (require('bevtrack').deleteEntry('bevtrack_entries.dat', recent[i].timestamp)) {
-          loadData();
-          render();
-        }
+        confirmDelete(recent[i]);
         return;
       }
     }
   }
+}
+
+// Ask before deleting. E.showPrompt replaces the UI handlers, so
+// restore ours once the user has answered.
+function confirmDelete(entry) {
+  var info = require('bevtrack').getBeverageInfo(entry.type);
+  var name = info ? info.name : entry.type;
+  var msg = name + " " + fmtVolume(entry.volume) + "\n" + fmtTime(entry.timestamp);
+  E.showPrompt(msg, { title: "Delete entry?" }).then(function (yes) {
+    if (yes) require('bevtrack').deleteEntry('bevtrack_entries.dat', entry.timestamp);
+    loadData();
+    setupUI();
+    render();
+  });
 }
 
 function handleSwipe(lr, ud) {
@@ -334,9 +345,15 @@ function handleSwipe(lr, ud) {
 loadData();
 render();
 
-Bangle.on("drag", function (e) {
-  lastPos.x = e.x;
-  lastPos.y = e.y;
-});
-Bangle.on("touch", handleTouch);
-Bangle.on("swipe", handleSwipe);
+function setupUI() {
+  Bangle.setUI({
+    mode: "custom",
+    touch: handleTouch,
+    swipe: handleSwipe,
+    drag: function (e) {
+      lastPos.x = e.x;
+      lastPos.y = e.y;
+    }
+  });
+}
+setupUI();
