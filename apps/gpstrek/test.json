@@ -5,9 +5,15 @@
       "id": "route",
       "steps": [
         {
+          "t": "upload",
+          "file": "apps/gpstrek/testdata/sample.trf",
+          "as": "gpstrek.test.trf",
+          "text": "Upload a small .trf route fixture (waypoint types A, C and D)"
+        },
+        {
           "t": "cmd",
-          "js": "global._gpstrekPad=function(v,n){v=''+v;while(v.length<n)v=' '+v;return v;};require('Storage').write('gpstrek.test.trf',['A'+_gpstrekPad('52.5200000',11)+_gpstrekPad('13.4050000',12),'C'+_gpstrekPad('52.5210000',11)+_gpstrekPad('13.4060000',12)+_gpstrekPad('120',6),'D'+_gpstrekPad('52.5300000',11)+_gpstrekPad('13.4200000',12)+_gpstrekPad('150',6)+_gpstrekPad('6',2)+'Summit'].join(String.fromCharCode(10))+String.fromCharCode(10));try{require('Storage').erase('gpstrek.test.tri')}catch(e){}",
-          "text": "Write a small .trf route fixture (waypoint types A, C and D)"
+          "js": "try{require('Storage').erase('gpstrek.test.tri')}catch(e){}",
+          "text": "Remove any stale index so the parser rebuilds it"
         },
         {
           "t": "cmd",
