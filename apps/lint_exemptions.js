@@ -240,13 +240,6 @@ module.exports = {
       "no-unused-vars"
     ]
   },
-  "apps/gpstrek/app.js": {
-    "hash": "9c941a29790dd642579478bf4b19a2afd5473a782d07fafd2c8113b2d7392bec",
-    "rules": [
-      "no-unused-vars",
-      "no-undef"
-    ]
-  },
   "apps/gpstouch/gpstouch.app.js": {
     "hash": "3492b202c866d6d619298456a48dd8501c4b34f5cce84698e92c62acaf3b8ce4",
     "rules": [
