@@ -20,3 +20,6 @@
       Draws direction arrows on route
       Turn of compass when GPS fix is available
 0.12: Minor code improvements
+0.13: Split route/geo logic (lib.js) and drawing (ui.js) out of app.js
+      Add tests for geo math, route parsing and UI building
+      Fix elevation descent tracking and malformed point handling

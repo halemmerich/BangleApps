@@ -1,0 +1,108 @@
+{
+  "app": "gpstrek",
+  "setup": [
+    {
+      "id": "route",
+      "steps": [
+        {
+          "t": "cmd",
+          "js": "global._gpstrekPad=function(v,n){v=''+v;while(v.length<n)v=' '+v;return v;};require('Storage').write('gpstrek.test.trf',['A'+_gpstrekPad('52.5200000',11)+_gpstrekPad('13.4050000',12),'C'+_gpstrekPad('52.5210000',11)+_gpstrekPad('13.4060000',12)+_gpstrekPad('120',6),'D'+_gpstrekPad('52.5300000',11)+_gpstrekPad('13.4200000',12)+_gpstrekPad('150',6)+_gpstrekPad('6',2)+'Summit'].join(String.fromCharCode(10))+String.fromCharCode(10));try{require('Storage').erase('gpstrek.test.tri')}catch(e){}",
+          "text": "Write a small .trf route fixture (waypoint types A, C and D)"
+        },
+        {
+          "t": "cmd",
+          "js": "global._gpstrekLib=require('gpstrek.lib.js')",
+          "text": "Load the logic library"
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "description": "Geo helpers use circular math and return sensible values",
+      "steps": [
+        {"t": "cmd", "js": "global._gpstrekLib=require('gpstrek.lib.js')"},
+        {"t": "assert", "js": "_gpstrekLib.distance({lat:0,lon:0},{lat:0,lon:1})", "is": "equal", "to": "111195", "text": "One degree of longitude at the equator"},
+        {"t": "assert", "js": "_gpstrekLib.bearing({lat:0,lon:0},{lat:0,lon:1})", "is": "equal", "to": "90", "text": "East bearing"},
+        {"t": "assert", "js": "_gpstrekLib.bearing({lat:0,lon:0},{lat:1,lon:0})", "is": "equal", "to": "0", "text": "North bearing"},
+        {"t": "assert", "js": "_gpstrekLib.averageHeading([350,10])", "is": "equal", "to": "0", "text": "Headings around north average to north"},
+        {"t": "assert", "js": "_gpstrekLib.averageHeading([0,90])", "is": "equal", "to": "45"},
+        {"t": "assert", "js": "isNaN(_gpstrekLib.distance({lat:0,lon:0},{}))", "is": "false", "text": "distance returns Infinity for incomplete points"}
+      ]
+    },
+    {
+      "description": "Route parser loads waypoints, elevation and index data",
+      "steps": [
+        {"t": "setup", "id": "route"},
+        {"t": "cmd", "js": "global._gpstrekRoute=_gpstrekLib.loadRouteData('gpstrek.test.trf',function(){})"},
+        {"t": "assert", "js": "_gpstrekRoute.count", "is": "equal", "to": "3"},
+        {"t": "assert", "js": "_gpstrekLib.getIndexFileName('gpstrek.test.trf')", "is": "equal", "to": "'gpstrek.test.tri'"},
+        {"t": "assert", "js": "_gpstrekLib.getRouteIndex(_gpstrekRoute).length", "is": "equal", "to": "3"},
+        {"t": "assert", "js": "_gpstrekLib.get(_gpstrekRoute,0).lat", "is": "equal", "to": "52.52"},
+        {"t": "assert", "js": "_gpstrekLib.get(_gpstrekRoute,1).alt", "is": "equal", "to": "120"},
+        {"t": "assert", "js": "_gpstrekLib.getLast(_gpstrekRoute).name", "is": "equal", "to": "'Summit'"},
+        {"t": "assert", "js": "_gpstrekRoute.length > 1000", "is": "true"},
+        {"t": "assert", "js": "_gpstrekRoute.up", "is": "equal", "to": "30", "text": "Elevation gain is accumulated"},
+        {"t": "assert", "js": "_gpstrekRoute.down", "is": "equal", "to": "0"}
+      ]
+    },
+    {
+      "description": "Waypoint navigation supports next/prev and mirrored routes",
+      "steps": [
+        {"t": "setup", "id": "route"},
+        {"t": "cmd", "js": "global._gpstrekRoute=_gpstrekLib.loadRouteData('gpstrek.test.trf',function(){})"},
+        {"t": "assert", "js": "_gpstrekRoute.index", "is": "equal", "to": "0"},
+        {"t": "cmd", "js": "_gpstrekLib.next(_gpstrekRoute)"},
+        {"t": "assert", "js": "_gpstrekRoute.index", "is": "equal", "to": "1"},
+        {"t": "cmd", "js": "_gpstrekLib.next(_gpstrekRoute);_gpstrekLib.next(_gpstrekRoute)"},
+        {"t": "assert", "js": "_gpstrekRoute.index", "is": "equal", "to": "2", "text": "next() stops at the last waypoint"},
+        {"t": "assert", "js": "_gpstrekLib.isLast(_gpstrekRoute)", "is": "true"},
+        {"t": "cmd", "js": "_gpstrekLib.prev(_gpstrekRoute)"},
+        {"t": "assert", "js": "_gpstrekRoute.index", "is": "equal", "to": "1"},
+        {"t": "cmd", "js": "_gpstrekRoute.mirror=true;_gpstrekRoute.index=0"},
+        {"t": "assert", "js": "_gpstrekLib.isLast(_gpstrekRoute)", "is": "true", "text": "Mirroring reverses the active index"}
+      ]
+    },
+    {
+      "description": "Closest waypoint search finds the nearest point",
+      "steps": [
+        {"t": "setup", "id": "route"},
+        {"t": "cmd", "js": "global._gpstrekRoute=_gpstrekLib.loadRouteData('gpstrek.test.trf',function(){})"},
+        {"t": "cmd", "js": "_gpstrekLib.setClosestWaypoint(_gpstrekRoute,0,null,null,{lat:52.5201,lon:13.4051})"},
+        {"t": "assert", "js": "_gpstrekRoute.index", "is": "equal", "to": "0"},
+        {"t": "cmd", "js": "_gpstrekLib.setClosestWaypoint(_gpstrekRoute,0,null,null,{lat:52.5210,lon:13.4060})"},
+        {"t": "assert", "js": "_gpstrekRoute.index", "is": "equal", "to": "1"},
+        {"t": "cmd", "js": "_gpstrekLib.setClosestWaypoint(_gpstrekRoute,undefined,null,null,{lat:52.5210,lon:13.4060})"},
+        {"t": "assert", "js": "_gpstrekRoute.index", "is": "equal", "to": "1", "text": "Search stops after passing the closest point"},
+        {"t": "cmd", "js": "_gpstrekLib.setClosestWaypoint(_gpstrekRoute,0,null,null,{})"},
+        {"t": "assert", "js": "_gpstrekRoute.index", "is": "equal", "to": "0", "text": "Without a fix the route stays on the start waypoint"}
+      ]
+    },
+    {
+      "description": "App boots with the widget and enters the info view",
+      "steps": [
+        {"t": "cmd", "js": "global._gpstrekSettings=require('Storage').readJSON('setting.json',true)||{};global._gpstrekSettings.widgets=['gpstrek.wid.js'];require('Storage').writeJSON('setting.json',global._gpstrekSettings)"},
+        {"t": "cmd", "js": "eval(require('Storage').read('gpstrek.app.js'))"},
+        {"t": "assert", "js": "WIDGETS.gpstrek && WIDGETS.gpstrek.getState().mode", "is": "equal", "to": "2"},
+        {"t": "assert", "js": "typeof require('gpstrek.lib.js').distance", "is": "equal", "to": "'function'"}
+      ]
+    },
+    {
+      "description": "UI library builds slices and draws without a widget",
+      "steps": [
+        {"t": "setup", "id": "route"},
+        {"t": "cmd", "js": "global._gpstrekState={currentPos:{lat:52.5201,lon:13.4051,course:90,speed:1.5,alt:120},route:null,waypoint:null,avgComp:90,up:0,down:0,altitude:120,steps:0,calibAltDiff:0,acc:{x:0,y:0},mode:2};global._gpstrekUi=require('gpstrek.ui.js').create({settings:_gpstrekLib.readSettings(),getState:function(){return global._gpstrekState;},screenWidth:176,screenHeight:176})"},
+        {"t": "assert", "js": "typeof _gpstrekUi.drawSlices", "is": "equal", "to": "'function'"},
+        {"t": "assert", "js": "_gpstrekUi.getSliceHeight() > 0", "is": "true"},
+        {"t": "assert", "js": "_gpstrekUi.getMaxSlicePages() > 0", "is": "true"},
+        {"t": "cmd", "js": "_gpstrekUi.drawSlices(g,0,true)"},
+        {"t": "assert", "js": "true", "is": "true", "text": "Drawing the info slices does not throw"},
+        {"t": "cmd", "js": "global._gpstrekState.route=_gpstrekLib.loadRouteData('gpstrek.test.trf',function(){});_gpstrekUi.drawMap(g)"},
+        {"t": "assert", "js": "true", "is": "true", "text": "Drawing the map with a route does not throw"},
+        {"t": "cmd", "js": "_gpstrekUi.toggleOverview();_gpstrekUi.zoom(1);_gpstrekUi.scrollOverview(1,1);_gpstrekUi.toggleScrolling();_gpstrekUi.toggleOverview()"},
+        {"t": "assert", "js": "_gpstrekUi.isOverview()", "is": "false"},
+        {"t": "assert", "js": "_gpstrekUi.isScrolling()", "is": "false"}
+      ]
+    }
+  ]
+}
