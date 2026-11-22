@@ -21,6 +21,29 @@
           "text": "Load the logic library"
         }
       ]
+    },
+    {
+      "id": "badroutes",
+      "steps": [
+        {
+          "t": "upload",
+          "file": "apps/gpstrek/testdata/badtype.trf",
+          "as": "gpstrek.badtype.trf",
+          "text": "Unknown waypoint type"
+        },
+        {
+          "t": "upload",
+          "file": "apps/gpstrek/testdata/badposition.trf",
+          "as": "gpstrek.badposition.trf",
+          "text": "Unparsable coordinates"
+        },
+        {
+          "t": "upload",
+          "file": "apps/gpstrek/testdata/truncated.trf",
+          "as": "gpstrek.truncated.trf",
+          "text": "Truncated waypoint"
+        }
+      ]
     }
   ],
   "tests": [
@@ -107,7 +130,86 @@
         {"t": "assert", "js": "true", "is": "true", "text": "Drawing the map with a route does not throw"},
         {"t": "cmd", "js": "_gpstrekUi.toggleOverview();_gpstrekUi.zoom(1);_gpstrekUi.scrollOverview(1,1);_gpstrekUi.toggleScrolling();_gpstrekUi.toggleOverview()"},
         {"t": "assert", "js": "_gpstrekUi.isOverview()", "is": "false"},
-        {"t": "assert", "js": "_gpstrekUi.isScrolling()", "is": "false"}
+        {"t": "assert", "js": "_gpstrekUi.isScrolling()", "is": "false"},
+        {"t": "cmd", "js": "for(let i=0;i<200;i++)_gpstrekUi.zoom(-1);global._gpstrekMinScale=_gpstrekUi.getScale()"},
+        {"t": "assert", "js": "_gpstrekMinScale >= 0.005", "is": "true", "text": "Zooming out is clamped"},
+        {"t": "cmd", "js": "for(let i=0;i<200;i++)_gpstrekUi.zoom(1);global._gpstrekMaxScale=_gpstrekUi.getScale()"},
+        {"t": "assert", "js": "_gpstrekMaxScale <= 20 && isFinite(_gpstrekMaxScale)", "is": "true", "text": "Zooming in is clamped"}
+      ]
+    },
+    {
+      "description": "Malformed and missing routes are rejected instead of partially loaded",
+      "steps": [
+        {"t": "setup", "id": "badroutes"},
+        {"t": "cmd", "js": "global._gpstrekLib=require('gpstrek.lib.js');global._routeError=function(f){try{_gpstrekLib.loadRouteData(f,function(){});return 'none'}catch(e){return e.message}}"},
+        {"t": "assert", "js": "_routeError('gpstrek.badtype.trf').indexOf('Unknown entry type') >= 0", "is": "true", "text": "Unknown entry type is reported"},
+        {"t": "assert", "js": "_routeError('gpstrek.badposition.trf').indexOf('Invalid position') >= 0", "is": "true", "text": "Invalid coordinates are reported"},
+        {"t": "assert", "js": "_routeError('gpstrek.truncated.trf').indexOf('Invalid position') >= 0", "is": "true", "text": "Truncated entries are reported"},
+        {"t": "assert", "js": "_routeError('gpstrek.missing.trf').indexOf('empty or missing') >= 0", "is": "true", "text": "Missing routes are reported"}
+      ]
+    },
+    {
+      "description": "A missing index is rebuilt from the route file",
+      "steps": [
+        {"t": "setup", "id": "route"},
+        {"t": "cmd", "js": "global._gpstrekRoute=_gpstrekLib.loadRouteData('gpstrek.test.trf',function(){});require('Storage').erase('gpstrek.test.tri');_gpstrekRoute.indexToOffset=undefined"},
+        {"t": "assert", "js": "_gpstrekLib.getRouteIndex(_gpstrekRoute).length", "is": "equal", "to": "3", "text": "Index is rebuilt on demand"},
+        {"t": "assert", "js": "(require('Storage').readArrayBuffer('gpstrek.test.tri')||{byteLength:0}).byteLength > 0", "is": "true", "text": "Rebuilt index is persisted"},
+        {"t": "assert", "js": "_gpstrekLib.get(_gpstrekRoute,2).name", "is": "equal", "to": "'Summit'"},
+        {"t": "cmd", "js": "require('Storage').erase('gpstrek.test.tri');require('Storage').write('gpstrek.test.tri',new Uint32Array([0]),0,20);_gpstrekRoute.indexToOffset=undefined"},
+        {"t": "assert", "js": "_gpstrekLib.getRouteIndex(_gpstrekRoute).length", "is": "equal", "to": "3", "text": "An index without the completion marker is rebuilt"}
+      ]
+    },
+    {
+      "description": "Closest search works on a mirrored route",
+      "steps": [
+        {"t": "setup", "id": "route"},
+        {"t": "cmd", "js": "global._gpstrekRoute=_gpstrekLib.loadRouteData('gpstrek.test.trf',function(){});_gpstrekRoute.mirror=true;_gpstrekLib.setWaypointIndex(_gpstrekRoute,0)"},
+        {"t": "assert", "js": "_gpstrekLib.get(_gpstrekRoute).name", "is": "equal", "to": "'Summit'", "text": "Mirrored route starts at the last physical waypoint"},
+        {"t": "cmd", "js": "_gpstrekLib.setClosestWaypoint(_gpstrekRoute,0,null,null,{lat:52.5211,lon:13.4061})"},
+        {"t": "assert", "js": "_gpstrekLib.get(_gpstrekRoute).lat", "is": "equal", "to": "52.521", "text": "Mirrored search finds the middle waypoint"},
+        {"t": "cmd", "js": "_gpstrekLib.setClosestWaypoint(_gpstrekRoute,undefined,null,null,{lat:52.52,lon:13.405})"},
+        {"t": "assert", "js": "_gpstrekLib.get(_gpstrekRoute).lat", "is": "equal", "to": "52.52", "text": "Mirrored search follows reversed order"}
+      ]
+    },
+    {
+      "description": "Background widget start and stop manage GPS power",
+      "steps": [
+        {"t": "cmd", "js": "global.WIDGETS={gpstrek:{}};eval(require('Storage').read('gpstrek.wid.js'))"},
+        {"t": "wrap", "fn": "Bangle.setGPSPower", "id": "gpspower"},
+        {"t": "cmd", "js": "WIDGETS.gpstrek.start(true)"},
+        {"t": "assert", "js": "WIDGETS.gpstrek.getState().active", "is": "true"},
+        {"t": "resetCall", "id": "gpspower", "text": "Ignore power calls made while starting"},
+        {"t": "cmd", "js": "WIDGETS.gpstrek.stop(true)"},
+        {"t": "assertCall", "id": "gpspower", "count": 0, "text": "Background stop keeps GPS running"},
+        {"t": "assert", "js": "WIDGETS.gpstrek.getState().active", "is": "false"},
+        {"t": "cmd", "js": "WIDGETS.gpstrek.stop(false)"},
+        {"t": "assertCall", "id": "gpspower", "count": 1, "argAsserts": [{"t": "assert", "arg": "0", "is": "equal", "to": "0"}], "text": "Foreground stop disables GPS"}
+      ]
+    },
+    {
+      "description": "GPS fixes toggle compass power",
+      "steps": [
+        {"t": "cmd", "js": "global.WIDGETS={gpstrek:{}};eval(require('Storage').read('gpstrek.wid.js'));Bangle.isCompassOn=function(){return true}"},
+        {"t": "wrap", "fn": "Bangle.setCompassPower", "id": "magpower"},
+        {"t": "cmd", "js": "WIDGETS.gpstrek.start(false)"},
+        {"t": "assertCall", "id": "magpower", "count": 1, "argAsserts": [{"t": "assert", "arg": "0", "is": "equal", "to": "1"}], "text": "Compass is enabled while searching"},
+        {"t": "emit", "event": "GPS", "paramsArray": [{"fix": true, "lat": 52.52, "lon": 13.405}]},
+        {"t": "assertCall", "id": "magpower", "count": 2, "argAsserts": [{"t": "assert", "arg": "0", "is": "equal", "to": "0"}], "text": "Compass is disabled once a fix is available"},
+        {"t": "emit", "event": "GPS", "paramsArray": [{"fix": false}]},
+        {"t": "assertCall", "id": "magpower", "count": 3, "argAsserts": [{"t": "assert", "arg": "0", "is": "equal", "to": "1"}], "text": "Compass is re-enabled when the fix is lost"}
+      ]
+    },
+    {
+      "description": "App cancels its routing timer on kill",
+      "steps": [
+        {"t": "cmd", "js": "global._gpstrekSettings=require('Storage').readJSON('setting.json',true)||{};global._gpstrekSettings.widgets=['gpstrek.wid.js'];require('Storage').writeJSON('setting.json',global._gpstrekSettings)"},
+        {"t": "wrap", "fn": "global.setInterval", "id": "setint"},
+        {"t": "wrap", "fn": "global.clearInterval", "id": "clearint"},
+        {"t": "cmd", "js": "eval(require('Storage').read('gpstrek.app.js'))"},
+        {"t": "assert", "js": "global.APPTESTS.funcCalls.setint >= 1", "is": "true", "text": "Routing interval is started"},
+        {"t": "emit", "event": "kill", "parent": "E"},
+        {"t": "assert", "js": "global.APPTESTS.funcCalls.clearint >= 1", "is": "true", "text": "Routing interval is cleared on kill"}
       ]
     }
   ]

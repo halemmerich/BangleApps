@@ -91,17 +91,32 @@ function triangle(x, y, width, height) {
 exports.create = function (options) {
   const settings = options.settings || lib.readSettings();
   const getState = options.getState;
-  const batFullVoltage = options.batFullVoltage || 0.3144;
+  const batFullVoltage =
+    (isFinite(options.batFullVoltage) && options.batFullVoltage > 0) ?
+      options.batFullVoltage : 0.3144;
   const defaultScreenWidth = options.screenWidth || g.getWidth();
   const defaultScreenHeight = options.screenHeight || g.getHeight();
+  const sliceCount = lib.clamp(Math.floor(settings.numberOfSlices) || 3, 1, 6);
+
+  const MAP_SCALE_MIN = 0.005;
+  const MAP_SCALE_MAX = 20;
+  const OVERVIEW_SCALE_MIN = 0.0005;
+  const OVERVIEW_SCALE_MAX = 2;
+  const OVERVIEW_SCROLL_LIMIT = 100000;
+
+  function validScale(value, fallback, min, max) {
+    value = Number(value);
+    if (!isFinite(value) || value <= 0) value = fallback;
+    return lib.clamp(value, min, max);
+  }
 
   let isMapOverview = false;
   let forceMapRedraw = false;
   let scrolling = false;
   let mapOverviewX = defaultScreenWidth / 2;
   let mapOverviewY = defaultScreenHeight / 2;
-  let mapOverviewScale = settings.overviewScale;
-  let mapLiveScale = settings.mapScale;
+  let mapOverviewScale = validScale(settings.overviewScale, 0.02, OVERVIEW_SCALE_MIN, OVERVIEW_SCALE_MAX);
+  let mapLiveScale = validScale(settings.mapScale, 0.5, MAP_SCALE_MIN, MAP_SCALE_MAX);
 
   let activeTimeouts = [];
   let taskQueue = [];
@@ -201,17 +216,18 @@ exports.create = function (options) {
         let route = s.route;
         if (!route) return;
         let waypoint = lib.get(route);
+        if (!waypoint) return;
         let currentRouteIndex = lib.getWaypointIndex(route);
         let startingPoint = Bangle.project(waypoint);
         let current = startingPoint;
         let currentPosFromGPS = false;
-        if (s.currentPos.lat) {
+        if (lib.isValidPosition(s.currentPos)) {
           current = Bangle.project(s.currentPos);
           currentPosFromGPS = true;
         } else {
           // in case of no actual position assume previous waypoint as current
           let prevPoint = lib.getPrev(route, currentRouteIndex);
-          if (prevPoint && prevPoint.lat) current = Bangle.project(prevPoint);
+          if (prevPoint && lib.isValidPosition(prevPoint)) current = Bangle.project(prevPoint);
         }
 
         const interfaceHeight = graphics.getHeight() * 0.1;
@@ -478,7 +494,7 @@ exports.create = function (options) {
         let start = targetDataSource.getStart();
         let target = targetDataSource.getTarget();
 
-        if (!target || !start) return;
+        if (!target || !start || !lib.isValidPosition(start)) return;
 
         let dist = lib.distance(start, target);
         if (isNaN(dist)) dist = Infinity;
@@ -554,14 +570,10 @@ exports.create = function (options) {
       getPoints: function () {
         let points = [];
         let s = getState();
-        if (s.currentPos && s.currentPos.lon && s.route) {
-          points.push({ bearing: lib.bearing(s.currentPos, lib.getLast(s.route)), icon: finishIcon });
-        }
-        if (s.currentPos && s.currentPos.lon && s.waypoint) {
-          points.push({ bearing: lib.bearing(s.currentPos, s.waypoint), icon: finishIcon });
-        }
-        if (s.currentPos && s.currentPos.lon && s.route) {
-          points.push({ bearing: lib.bearing(s.currentPos, lib.get(s.route)), color: "#0f0" });
+        if (lib.isValidPosition(s.currentPos)) {
+          if (s.route) points.push({ bearing: lib.bearing(s.currentPos, lib.getLast(s.route)), icon: finishIcon });
+          if (s.waypoint) points.push({ bearing: lib.bearing(s.currentPos, s.waypoint), icon: finishIcon });
+          if (s.route) points.push({ bearing: lib.bearing(s.currentPos, lib.get(s.route)), color: "#0f0" });
         }
         return points;
       },
@@ -707,7 +719,7 @@ exports.create = function (options) {
   const statusSlice = getDoubleLineSlice("Speed", "Alt", () => {
     let speed = 0;
     let s = getState();
-    if (s.currentPos && s.currentPos.speed) speed = s.currentPos.speed;
+    if (s.currentPos && isFinite(s.currentPos.speed)) speed = s.currentPos.speed;
     return loc.speed(speed, 2);
   }, () => {
     let alt = Infinity;
@@ -715,8 +727,8 @@ exports.create = function (options) {
     if (isFinite(s.altitude)) {
       alt = isNaN(s.calibAltDiff) ? s.altitude : (s.altitude - s.calibAltDiff);
     }
-    if (s.currentPos && s.currentPos.alt) alt = s.currentPos.alt;
-    if (isNaN(alt)) return "---";
+    if (s.currentPos && isFinite(s.currentPos.alt)) alt = s.currentPos.alt;
+    if (!isFinite(alt)) return "---";
     return loc.distance(alt, 3);
   });
 
@@ -725,7 +737,7 @@ exports.create = function (options) {
   }, () => {
     let course = "---°";
     let s = getState();
-    if (s.currentPos && s.currentPos.course) course = s.currentPos.course.toFixed(0) + "°";
+    if (s.currentPos && isFinite(s.currentPos.course)) course = s.currentPos.course.toFixed(0) + "°";
     return course;
   });
 
@@ -736,7 +748,9 @@ exports.create = function (options) {
   });
 
   const system2Slice = getDoubleLineSlice("Bat", "Storage", () => {
-    return (Bangle.isCharging() ? "+" : "") + E.getBattery().toFixed(0) + "% " + (analogRead(D3) * 4.2 / batFullVoltage).toFixed(2) + "V";
+    let voltage = analogRead(D3) * 4.2 / batFullVoltage;
+    if (!isFinite(voltage)) voltage = 0;
+    return (Bangle.isCharging() ? "+" : "") + E.getBattery().toFixed(0) + "% " + voltage.toFixed(2) + "V";
   }, () => {
     return (require("Storage").getFree() / 1024).toFixed(0) + "kB";
   });
@@ -755,10 +769,10 @@ exports.create = function (options) {
   function updateSlices() {
     let s = getState();
     slices = [compassSlice];
-    if (s.currentPos && s.currentPos.lat && s.route && !lib.isLast(s.route)) {
+    if (lib.isValidPosition(s.currentPos) && s.route && !lib.isLast(s.route)) {
       slices.push(waypointSlice);
     }
-    if (s.currentPos && s.currentPos.lat && (s.route || s.waypoint)) {
+    if (lib.isValidPosition(s.currentPos) && (s.route || s.waypoint)) {
       slices.push(finishSlice);
     }
     slices.push(eleSlice);
@@ -767,11 +781,11 @@ exports.create = function (options) {
     slices.push(healthSlice);
     slices.push(systemSlice);
     slices.push(system2Slice);
-    maxSlicePages = Math.ceil(slices.length / settings.numberOfSlices);
+    maxSlicePages = Math.ceil(slices.length / sliceCount);
   }
 
   function getSliceHeight() {
-    return Math.floor(Bangle.appRect.h / settings.numberOfSlices);
+    return Math.floor(Bangle.appRect.h / sliceCount);
   }
 
   function clear(graphics) {
@@ -790,9 +804,9 @@ exports.create = function (options) {
     if (force) {
       clear(graphics);
     }
-    let firstSlice = page * settings.numberOfSlices;
+    let firstSlice = page * sliceCount;
     let sliceHeight = getSliceHeight();
-    let slicesToDraw = slices.slice(firstSlice, firstSlice + settings.numberOfSlices);
+    let slicesToDraw = slices.slice(firstSlice, firstSlice + sliceCount);
     for (let slice of slicesToDraw) {
       graphics.reset();
       if (!slice.refresh || slice.refresh() || force)
@@ -829,16 +843,23 @@ exports.create = function (options) {
   }
 
   function scrollOverview(dx, dy) {
-    mapOverviewX += dx * settings.overviewScroll;
-    mapOverviewY += dy * settings.overviewScroll;
+    mapOverviewX = lib.clamp(mapOverviewX + dx * settings.overviewScroll,
+      -OVERVIEW_SCROLL_LIMIT, OVERVIEW_SCROLL_LIMIT);
+    mapOverviewY = lib.clamp(mapOverviewY + dy * settings.overviewScroll,
+      -OVERVIEW_SCROLL_LIMIT, OVERVIEW_SCROLL_LIMIT);
   }
 
   function zoom(direction) {
+    let factor = direction > 0 ? 1.33 : 1 / 1.33;
     if (isMapOverview) {
-      mapOverviewScale *= direction > 0 ? 1.33 : 1 / 1.33;
+      mapOverviewScale = lib.clamp(mapOverviewScale * factor, OVERVIEW_SCALE_MIN, OVERVIEW_SCALE_MAX);
     } else {
-      mapLiveScale *= direction > 0 ? 1.33 : 1 / 1.33;
+      mapLiveScale = lib.clamp(mapLiveScale * factor, MAP_SCALE_MIN, MAP_SCALE_MAX);
     }
+  }
+
+  function getScale() {
+    return isMapOverview ? mapOverviewScale : mapLiveScale;
   }
 
   return {
@@ -854,6 +875,7 @@ exports.create = function (options) {
     isScrolling: isScrolling,
     toggleScrolling: toggleScrolling,
     scrollOverview: scrollOverview,
-    zoom: zoom
+    zoom: zoom,
+    getScale: getScale
   };
 };

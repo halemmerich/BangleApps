@@ -4,6 +4,17 @@ const MODE_MENU = 0;
 const MODE_MAP = 1;
 const MODE_SLICES = 2;
 
+const ENTRY_EOF = -1;
+const ENTRY_INVALID = -2;
+
+// Index layout: hash, marker, then 3 byte offsets. The marker is written
+// last so an interrupted build cannot be mistaken for a complete index.
+const INDEX_HASH_OFFSET = 0;
+const INDEX_MARKER_OFFSET = 4;
+const INDEX_OFFSETS_START = 5;
+const INDEX_MARKER = 0xA5;
+const EMPTY_INDEX = [];
+
 function readSettings() {
   return Object.assign(
     STORAGE.readJSON("gpstrek.default.json", true) || {},
@@ -22,8 +33,14 @@ function degrees(a) {
   return (d + 360) % 360;
 }
 
+function clamp(value, min, max) {
+  if (!isFinite(value)) return min;
+  return value < min ? min : (value > max ? max : value);
+}
+
 function isValidPosition(p) {
-  return p && isFinite(p.lat) && isFinite(p.lon);
+  return p && isFinite(p.lat) && isFinite(p.lon) &&
+    p.lat >= -90 && p.lat <= 90 && p.lon >= -180 && p.lon <= 180;
 }
 
 function bearing(a, b) {
@@ -67,20 +84,24 @@ function averageHeading(samples) {
 }
 
 function parseNumber(toParse) {
+  if (typeof toParse != "string" || !toParse.length) return NaN;
   if (toParse.includes(".")) return parseFloat(toParse);
   return parseFloat("" + toParse + ".0");
 }
 
 function parseName(filename, offset, result) {
-  let nameLength = STORAGE.read(filename, offset, 2) - 0;
-  result.name = STORAGE.read(filename, offset += 2, nameLength);
-  return offset + nameLength;
+  let nameLength = Number(STORAGE.read(filename, offset, 2));
+  if (!isFinite(nameLength) || nameLength < 0) return -1;
+  let name = STORAGE.read(filename, offset + 2, nameLength);
+  if (typeof name != "string" || name.length != nameLength) return -1;
+  result.name = name;
+  return offset + 2 + nameLength;
 }
 
 function parseWaypoint(filename, offset, result) {
   result.lat = parseNumber(STORAGE.read(filename, offset, 11));
-  result.lon = parseNumber(STORAGE.read(filename, offset += 11, 12));
-  return offset + 12;
+  result.lon = parseNumber(STORAGE.read(filename, offset + 11, 12));
+  return offset + 23;
 }
 
 function parseWaypointWithElevation(filename, offset, result) {
@@ -147,9 +168,18 @@ function getEntry(filename, offset, result, noCaching) {
   if (offset < 0) return offset;
   let cacheOffset = getFromCache(filename, offset, result);
   if (cacheOffset != offset) return cacheOffset;
+
+  // Skip blank lines between entries.
+  let type;
+  while (true) {
+    type = STORAGE.read(filename, offset, 1);
+    if (!type) return ENTRY_EOF;
+    if (type != "\n" && type != "\r") break;
+    offset++;
+  }
+
   result.fileOffset = offset;
-  let type = STORAGE.read(filename, offset++, 1);
-  if (type == "") return -1;
+  offset++;
   switch (type) {
     case "A":
       offset = parseWaypoint(filename, offset, result);
@@ -164,10 +194,18 @@ function getEntry(filename, offset, result, noCaching) {
       offset = parseWaypointWithElevationAndName(filename, offset, result);
       break;
     default:
-      print("Unknown entry type", type);
-      return -1;
+      result.error = "Unknown entry type " + type;
+      return ENTRY_INVALID;
+  }
+  if (offset < 0) {
+    result.error = "Truncated entry";
+    return ENTRY_INVALID;
   }
   offset++;
+  if (!isValidPosition(result)) {
+    result.error = "Invalid position";
+    return ENTRY_INVALID;
+  }
 
   result.fileLength = offset - result.fileOffset;
   if (!noCaching && (SETTINGS.cacheMaxEntries || SETTINGS.cacheMinFreeMem)) {
@@ -177,7 +215,14 @@ function getEntry(filename, offset, result, noCaching) {
 }
 
 function getFileSize(filename) {
-  return STORAGE.readArrayBuffer(filename).byteLength;
+  let buffer = STORAGE.readArrayBuffer(filename);
+  return buffer ? buffer.byteLength : 0;
+}
+
+function writeUint8(filename, number, offset, size) {
+  let b = new ArrayBuffer(1);
+  new Uint8Array(b)[0] = number & 0xFF;
+  STORAGE.write(filename, b, offset, size);
 }
 
 function writeUint24(filename, number, offset, size) {
@@ -198,52 +243,117 @@ function getIndexFileName(filename) {
   return filename.substring(0, filename.length - 1) + "i";
 }
 
+function indexFileSizeFor(fileSize) {
+  // shortest entry is 25 bytes, 3 bytes per offset, plus hash/marker
+  return Math.ceil(fileSize / 25 * 3 + 6);
+}
+
+function readIndexBuffer(indexFileName) {
+  try {
+    return STORAGE.readArrayBuffer(indexFileName);
+  } catch (e) {
+    return undefined;
+  }
+}
+
+function isValidIndexBuffer(buffer, count) {
+  if (!buffer || buffer.byteLength < INDEX_OFFSETS_START + count * 3) return false;
+  return new Uint8Array(buffer)[INDEX_MARKER_OFFSET] == INDEX_MARKER;
+}
+
+/** Rebuild the offset index by scanning the route file. */
+function buildIndexFile(filename) {
+  let fileSize = getFileSize(filename);
+  let indexFileName = getIndexFileName(filename);
+  let indexFileSize = indexFileSizeFor(fileSize);
+  STORAGE.erase(indexFileName);
+  writeUint32(indexFileName, E.CRC32(STORAGE.read(filename) || ""), INDEX_HASH_OFFSET, indexFileSize);
+  let offset = 0;
+  let count = 0;
+  let waypoint = {};
+  while (true) {
+    offset = getEntry(filename, offset, waypoint, true);
+    if (offset === ENTRY_INVALID) return -1;
+    if (offset === ENTRY_EOF) break;
+    writeUint24(indexFileName, waypoint.fileOffset, INDEX_OFFSETS_START + count * 3, indexFileSize);
+    count++;
+    waypoint = {};
+  }
+  // Marker is written last, so an interrupted build is always detected.
+  writeUint8(indexFileName, INDEX_MARKER, INDEX_MARKER_OFFSET, indexFileSize);
+  return count;
+}
+
 function getRouteIndex(route) {
+  if (!route) return EMPTY_INDEX;
   if (!route.indexToOffset) loadIndex(route);
-  return route.indexToOffset;
+  return route.indexToOffset || EMPTY_INDEX;
 }
 
 function loadIndex(routeInfo) {
-  routeInfo.indexToOffset = new Uint24Array(
-    STORAGE.readArrayBuffer(getIndexFileName(routeInfo.filename)), 4, routeInfo.count
-  );
+  if (!routeInfo || !routeInfo.filename) return;
+  let count = routeInfo.count || 0;
+  if (!count) {
+    routeInfo.indexToOffset = EMPTY_INDEX;
+    return;
+  }
+  let indexFileName = getIndexFileName(routeInfo.filename);
+  let buffer = readIndexBuffer(indexFileName);
+  if (!isValidIndexBuffer(buffer, count)) {
+    if (buildIndexFile(routeInfo.filename) != count) {
+      routeInfo.indexToOffset = EMPTY_INDEX;
+      return;
+    }
+    buffer = readIndexBuffer(indexFileName);
+  }
+  if (!isValidIndexBuffer(buffer, count)) {
+    routeInfo.indexToOffset = EMPTY_INDEX;
+    return;
+  }
+  routeInfo.indexToOffset = new Uint24Array(buffer, INDEX_OFFSETS_START, count);
 }
 
 function loadRouteData(filename, progressMonitor) {
   let routeInfo = {};
 
   routeInfo.filename = filename;
-
-  let scanOffset = 0;
   routeInfo.length = 0;
   routeInfo.mirror = false;
+  routeInfo.up = 0;
+  routeInfo.down = 0;
+  routeInfo.count = 0;
+
+  let size = getFileSize(filename);
+  let trfHash = E.CRC32(STORAGE.read(filename) || "");
+  let indexFileName = getIndexFileName(filename);
+  let indexFileSize = indexFileSizeFor(size);
+
+  let createIndexFile = true;
+  let indexBuffer = readIndexBuffer(indexFileName);
+  if (isValidIndexBuffer(indexBuffer, 0)) {
+    let currentHash = new Uint32Array(indexBuffer, INDEX_HASH_OFFSET, 1)[0];
+    if (currentHash == trfHash) createIndexFile = false;
+  }
+
+  if (createIndexFile) {
+    STORAGE.erase(indexFileName);
+    writeUint32(indexFileName, trfHash, INDEX_HASH_OFFSET, indexFileSize);
+  }
+
+  let scanOffset = 0;
   let lastSeenWaypoint;
   let lastSeenAlt;
   let waypoint = {};
   let count = 0;
 
-  routeInfo.up = 0;
-  routeInfo.down = 0;
-
-  let trfHash = E.CRC32(STORAGE.read(filename));
-  let size = getFileSize(filename);
-  let indexFileName = getIndexFileName(filename);
-  // shortest possible entry is 24 characters + linebreak, 3 bytes per entry, 4 bytes hash in front
-  let indexFileSize = Math.ceil(size / 25 * 3 + 4);
-  let createIndexFile = !STORAGE.read(indexFileName);
-  if (!createIndexFile) {
-    let currentHash = new Uint32Array(STORAGE.readArrayBuffer(indexFileName), 0, 1)[0];
-    if (currentHash != trfHash) {
-      createIndexFile = true;
+  while (true) {
+    let offset = getEntry(filename, scanOffset, waypoint, true);
+    if (offset === ENTRY_EOF) break;
+    if (offset === ENTRY_INVALID) {
+      throw new Error((waypoint.error || "Invalid route data") +
+        " at offset " + waypoint.fileOffset);
     }
-  }
-
-  // write hash into index file, will be recreated by this
-  if (createIndexFile)
-    writeUint32(indexFileName, trfHash, 0, indexFileSize);
-
-  while ((scanOffset = getEntry(filename, scanOffset, waypoint, true)) > 0) {
-    if (count % 5 == 0) progressMonitor(scanOffset, "Loading", size);
+    if (count % 5 == 0 && progressMonitor) progressMonitor(offset, "Loading", size);
     if (lastSeenWaypoint) {
       let dist = distance(lastSeenWaypoint, waypoint);
       if (isFinite(dist)) routeInfo.length += dist;
@@ -257,12 +367,20 @@ function loadRouteData(filename, progressMonitor) {
         }
       }
     }
-    if (createIndexFile) writeUint24(indexFileName, waypoint.fileOffset, 4 + count * 3, indexFileSize);
+    if (createIndexFile)
+      writeUint24(indexFileName, waypoint.fileOffset, INDEX_OFFSETS_START + count * 3, indexFileSize);
     count++;
     lastSeenWaypoint = waypoint;
     if (isFinite(waypoint.alt)) lastSeenAlt = waypoint.alt;
     waypoint = {};
+    scanOffset = offset;
   }
+  // Marker last: a partially built index is rejected on the next load.
+  if (createIndexFile)
+    writeUint8(indexFileName, INDEX_MARKER, INDEX_MARKER_OFFSET, indexFileSize);
+
+  if (!count) throw new Error("Route is empty or missing: " + filename);
+
   routeInfo.count = count;
   loadIndex(routeInfo);
 
@@ -271,11 +389,14 @@ function loadRouteData(filename, progressMonitor) {
 }
 
 function getWaypointIndex(route, index) {
+  if (!route) return 0;
   if (isNaN(index)) index = route.index;
+  if (isNaN(index)) index = 0;
   return route.mirror ? getRouteIndex(route).length - 1 - index : index;
 }
 
 function setWaypointIndex(route, waypointIndex) {
+  if (!route) return;
   if (route.mirror)
     route.index = getRouteIndex(route).length - 1 - waypointIndex;
   else
@@ -283,11 +404,13 @@ function setWaypointIndex(route, waypointIndex) {
 }
 
 function hasPrev(route, index) {
+  if (!route) return false;
   if (isNaN(index)) index = getWaypointIndex(route);
   return index > 0;
 }
 
 function hasNext(route, index, count) {
+  if (!route) return false;
   if (count === undefined) count = 1;
   if (isNaN(index)) index = route.index;
   return getWaypointIndex(route, index) + count < (getRouteIndex(route).length);
@@ -295,19 +418,25 @@ function hasNext(route, index, count) {
 
 function getNext(route, index, count) {
   if (count === undefined) count = 1;
+  if (!route) return;
   if (isNaN(index)) index = getWaypointIndex(route);
   index += count;
   if (index >= getRouteIndex(route).length || index < 0) return;
   let result = {};
-  getEntry(route.filename, getRouteIndex(route)[getWaypointIndex(route, index)], result);
+  let fileOffset = getRouteIndex(route)[getWaypointIndex(route, index)];
+  if (fileOffset === undefined) return;
+  getEntry(route.filename, fileOffset, result);
   return result;
 }
 
 function get(route, index) {
+  if (!route) return;
   if (isNaN(index)) index = getWaypointIndex(route);
   if (index >= getRouteIndex(route).length || index < 0) return;
   let result = {};
-  getEntry(route.filename, getRouteIndex(route)[getWaypointIndex(route, index)], result);
+  let fileOffset = getRouteIndex(route)[getWaypointIndex(route, index)];
+  if (fileOffset === undefined) return;
+  getEntry(route.filename, fileOffset, result);
   return result;
 }
 
@@ -331,10 +460,12 @@ function set(route, index) {
 }
 
 function getLast(route) {
+  if (!route) return;
   return get(route, getRouteIndex(route).length - 1);
 }
 
 function isLast(route, index) {
+  if (!route) return true;
   if (isNaN(index)) index = route.index;
   index = getWaypointIndex(route, index);
   return getRouteIndex(route).length - 1 == index;
@@ -346,12 +477,16 @@ function isLast(route, index) {
  * waypoint that gets farther away again.
  */
 function setClosestWaypoint(route, startindex, progress, maxDist, currentPos) {
+  if (!route) return;
+  let indexLength = getRouteIndex(route).length;
+  if (!indexLength) return;
+
   let stopSearchAfterFirstMatch = !isFinite(startindex);
   if (!startindex) startindex = 0;
-  if (startindex >= getRouteIndex(route).length) startindex = getRouteIndex(route).length - 1;
+  if (startindex >= indexLength) startindex = indexLength - 1;
   if (startindex < 0) startindex = 0;
 
-  if (!currentPos || !currentPos.lat) {
+  if (!isValidPosition(currentPos)) {
     set(route, startindex);
     return;
   }
@@ -362,11 +497,11 @@ function setClosestWaypoint(route, startindex, progress, maxDist, currentPos) {
   let count = 0;
   let wp;
   do {
-    if (progress && (count % 5 == 0)) progress(count + startindex, "Searching", getRouteIndex(route).length);
+    if (progress && (count % 5 == 0)) progress(count + startindex, "Searching", indexLength);
     wp = getNext(route, startindex, count);
     if (!wp) break;
     let curDist = distance(currentPos, wp);
-    if (curDist > maxDist) {
+    if (!isFinite(curDist) || curDist > maxDist) {
       break;
     }
     if (curDist < minDist) {
@@ -387,6 +522,8 @@ exports.SETTINGS = SETTINGS;
 exports.readSettings = readSettings;
 exports.radians = radians;
 exports.degrees = degrees;
+exports.clamp = clamp;
+exports.isValidPosition = isValidPosition;
 exports.bearing = bearing;
 exports.distance = distance;
 exports.averageHeading = averageHeading;

@@ -6,7 +6,7 @@ const MODE_MAP = lib.MODE_MAP;
 const MODE_SLICES = lib.MODE_SLICES;
 
 const STORAGE = require("Storage");
-const BAT_FULL = require("Storage").readJSON("setting.json").batFullVoltage || 0.3144;
+const BAT_FULL = (STORAGE.readJSON("setting.json", true) || {}).batFullVoltage || 0.3144;
 const SETTINGS = lib.SETTINGS;
 
 let drawTimeout;
@@ -132,9 +132,18 @@ let showProgress = function (progress, title, max) {
 let handleLoading = function (c) {
   E.showMenu();
   let s = WIDGETS.gpstrek.getState();
-  s.route = lib.loadRouteData(c, showProgress);
+  let oldRoute = s.route;
+  try {
+    s.route = lib.loadRouteData(c, showProgress);
+  } catch (e) {
+    s.route = oldRoute;
+    E.showAlert("Could not load route\n" + (e && e.message ? e.message : e))
+      .then(showRouteMenu);
+    return false;
+  }
   if (SETTINGS.autosearch && searchNeeded < 2) searchNeeded = 2;
   s.waypoint = null;
+  return true;
 };
 
 let showRouteSelector = function () {
@@ -145,7 +154,7 @@ let showRouteSelector = function () {
   };
 
   STORAGE.list(/\.trf$/).sort().forEach((file) => {
-    menu[file] = () => { handleLoading(file); showRouteMenu() };
+    menu[file] = () => { if (handleLoading(file)) showRouteMenu() };
   });
 
   E.showMenu(menu);
@@ -179,7 +188,7 @@ let showRouteMenu = function () {
       }
     };
     menu['Select closest waypoint'] = function () {
-      if (s.currentPos && s.currentPos.lat) {
+      if (lib.isValidPosition(s.currentPos)) {
         if (searchNeeded < 2) searchNeeded = 2;
         removeMenu();
       } else {
@@ -187,7 +196,7 @@ let showRouteMenu = function () {
       }
     };
     menu['Select closest waypoint (not visited)'] = function () {
-      if (s.currentPos && s.currentPos.lat) {
+      if (lib.isValidPosition(s.currentPos)) {
         if (searchNeeded < 1) searchNeeded = 1;
         removeMenu();
       } else {
@@ -201,6 +210,8 @@ let showRouteMenu = function () {
     };
     menu['Select waypoint as current position'] = function () {
       let c = lib.get(s.route);
+      if (!c) return;
+      if (!s.currentPos) s.currentPos = {};
       s.currentPos.lat = c.lat;
       s.currentPos.lon = c.lon;
       s.currentPos.alt = c.alt;
@@ -323,10 +334,12 @@ let startDrawing = function () {
 
 let drawInTimeout = function () {
   if (drawTimeout) return;
+  let refresh = Bangle.isLocked() ? SETTINGS.refreshLocked : SETTINGS.refresh;
+  if (!isFinite(refresh) || refresh < 100) refresh = 500;
   drawTimeout = setTimeout(() => {
     drawTimeout = undefined;
     draw();
-  }, Bangle.isLocked() ? SETTINGS.refreshLocked : SETTINGS.refresh);
+  }, refresh);
 };
 
 let switchNav = function () {
@@ -357,24 +370,41 @@ let autosearchCounter = 0;
 
 let updateRouting = function () {
   let s = WIDGETS.gpstrek.getState();
-  if (s.mode != MODE_MENU && s.route && s.currentPos.lat) {
-    let currentDistanceToTarget = lib.distance(s.currentPos, lib.get(s.route));
-    if (currentDistanceToTarget < minimumDistance) {
-      minimumDistance = currentDistanceToTarget;
-    }
-    if (SETTINGS.autosearch && autosearchCounter < SETTINGS.autosearchLimit && !ui.isOverview() && lastSearch + 15000 < Date.now() && minimumDistance < currentDistanceToTarget - SETTINGS.waypointChangeDist) {
-      Bangle.buzz(1000);
-      lib.setClosestWaypoint(s.route, lib.getWaypointIndex(s.route), null, SETTINGS.maxDistForAutosearch, s.currentPos);
-      minimumDistance = Number.MAX_VALUE;
-      lastSearch = Date.now();
-      autosearchCounter++;
-    }
-    while (lib.hasNext(s.route) && lib.distance(s.currentPos, lib.get(s.route)) < SETTINGS.waypointChangeDist) {
-      lib.next(s.route);
-      minimumDistance = Number.MAX_VALUE;
-      autosearchCounter = 0;
-    }
+  if (s.mode == MODE_MENU || !s.route || !lib.isValidPosition(s.currentPos)) return;
+
+  let target = lib.get(s.route);
+  if (!target) return;
+  let currentDistanceToTarget = lib.distance(s.currentPos, target);
+  if (!isFinite(currentDistanceToTarget)) return;
+
+  if (currentDistanceToTarget < minimumDistance) {
+    minimumDistance = currentDistanceToTarget;
   }
+  if (SETTINGS.autosearch && autosearchCounter < SETTINGS.autosearchLimit && !ui.isOverview() && lastSearch + 15000 < Date.now() && minimumDistance < currentDistanceToTarget - SETTINGS.waypointChangeDist) {
+    Bangle.buzz(1000);
+    lib.setClosestWaypoint(s.route, lib.getWaypointIndex(s.route), null, SETTINGS.maxDistForAutosearch, s.currentPos);
+    minimumDistance = Number.MAX_VALUE;
+    lastSearch = Date.now();
+    autosearchCounter++;
+  }
+  while (lib.hasNext(s.route)) {
+    let nextTarget = lib.get(s.route);
+    if (!nextTarget || !(lib.distance(s.currentPos, nextTarget) < SETTINGS.waypointChangeDist)) break;
+    lib.next(s.route);
+    minimumDistance = Number.MAX_VALUE;
+    autosearchCounter = 0;
+  }
+};
+
+let routingInterval;
+
+let startRouting = function () {
+  if (!routingInterval) routingInterval = setInterval(updateRouting, 500);
+};
+
+let stopRouting = function () {
+  if (routingInterval !== undefined) clearInterval(routingInterval);
+  routingInterval = undefined;
 };
 
 let switchMode = function (targetMode) {
@@ -435,5 +465,13 @@ clear();
 
 switchMode(MODE_SLICES);
 
-setInterval(updateRouting, 500);
+startRouting();
+
+let onKill = function () {
+  stopRouting();
+  stopDrawing();
+  E.removeListener("kill", onKill);
+};
+
+E.on("kill", onKill);
 }
